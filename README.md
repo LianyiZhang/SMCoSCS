@@ -1,11 +1,11 @@
 # SMCoSCS
 
-This project is for experiment resources of paper,  *Statistic Model Checking of Stochastic Component-based Systems* .
+This project is for experiment resources of paper,  *Statistic Model Checking of Stochastic Component-based Systems*.
 
 ### Derictory Description
 
 **/bip-sms-1.1** <br>
-BIP stochastic model checker tools and the source of PTP bip model files .
+BIP stochastic model checker tools and the source of PTP bip model files.
 
 
 **/prism_model** <br>
