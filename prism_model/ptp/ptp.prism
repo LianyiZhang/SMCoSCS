@@ -1,0 +1,253 @@
+dtmc
+
+const int p = 60*100;
+const int inf = 600*100;
+const int fwd = 5;
+const int delay = 200;
+const int favg = 5;
+const int bavg = 40;
+
+module Master
+    tm : [0..p+delay] init 0;
+    x_m : [0..p] init 0;
+    delta_m: [0..p] init p;
+    t1_m: [0..p];
+    t4_m: [0..p+delay];
+    D: [0..19];
+    place_m: [0..4] init 0;
+	
+    [sync1] place_m=0&x_m=p->   0.1:(t1_m'=tm)&(x_m'=0)&(D'=10)&(delta_m'=10)&(place_m'=1)
+			   +   	0.1:(t1_m'=tm)&(x_m'=0)&(D'=11)&(delta_m'=11)&(place_m'=1)
+			   + 	0.1:(t1_m'=tm)&(x_m'=0)&(D'=12)&(delta_m'=12)&(place_m'=1)
+			   + 	0.1:(t1_m'=tm)&(x_m'=0)&(D'=13)&(delta_m'=13)&(place_m'=1)
+			   + 	0.1:(t1_m'=tm)&(x_m'=0)&(D'=14)&(delta_m'=14)&(place_m'=1)
+			   + 	0.1:(t1_m'=tm)&(x_m'=0)&(D'=15)&(delta_m'=15)&(place_m'=1)
+			   + 	0.1:(t1_m'=tm)&(x_m'=0)&(D'=16)&(delta_m'=16)&(place_m'=1)
+			   + 	0.1:(t1_m'=tm)&(x_m'=0)&(D'=17)&(delta_m'=17)&(place_m'=1)
+			   + 	0.1:(t1_m'=tm)&(x_m'=0)&(D'=18)&(delta_m'=18)&(place_m'=1)
+			   + 	0.1:(t1_m'=tm)&(x_m'=0)&(D'=19)&(delta_m'=19)&(place_m'=1);
+    [followUp1] place_m=1&x_m=D->	1.0:(delta_m'= p-D)&(place_m'=2);
+    [delayReq2] place_m=2 ->	1.0:(t4_m'=tm)&(delta_m'=0)&(place_m'=3);
+    [delayResp1] place_m=3 ->	1.0:(delta_m'=p-x_m)&(place_m'=4);
+    [reset1] place_m=4	->	1.0:(delta_m'=p-x_m)&(tm'=0)&(place_m'=0);
+
+    [time] place_m=0&delta_m>0 -> 1.0: (tm'=tm+min(delta_m,delta_s,delta_f,delta_b))
+					&(x_m'=x_m+min(delta_m,delta_s,delta_f,delta_b))
+					&(delta_m'=p-x_m-min(delta_m,delta_s,delta_f,delta_b));
+    [time] place_m=1&delta_m>0 -> 1.0: (tm'=tm+min(delta_m,delta_s,delta_f,delta_b))
+					&(x_m'=x_m+min(delta_m,delta_s,delta_f,delta_b))
+					&(delta_m'=D-x_m-min(delta_m,delta_s,delta_f,delta_b));
+    [time] place_m=2&delta_m>0 -> 1.0: (tm'=tm+min(delta_m,delta_s,delta_f,delta_b))
+					&(x_m'=x_m+min(delta_m,delta_s,delta_f,delta_b))
+					&(delta_m'=p-x_m-min(delta_m,delta_s,delta_f,delta_b));
+    [time] place_m=4&delta_m>0 -> 1.0: (tm'=tm+min(delta_m,delta_s,delta_f,delta_b))
+					&(x_m'=x_m+min(delta_m,delta_s,delta_f,delta_b))
+					&(delta_m'=p-x_m-min(delta_m,delta_s,delta_f,delta_b));
+endmodule
+
+
+module Slave
+    ts : [-delay..p+delay] init 0;
+    delta_s : [0..inf] init inf;
+    t1_s: [0..p];
+    t2_s: [0..p+delay];
+    t3_s: [0..p+delay];
+    t4_s: [0..p+delay];
+    o : [-delay..delay];
+    co : [-delay..delay] init 0;
+    place_s: [0..4] init 0;
+    
+    [sync2] place_s=0 ->	1.0:(t2_s'=ts)&(place_s'=1);
+    [followUp2] place_s=1 ->	1.0:(t1_s'=t1_f)&(delta_s'=0)&(place_s'=2);
+    [delayReq1] place_s=2 ->	1.0:(t3_s'=ts)&(delta_s'=inf)&(place_s'=3);
+    [delayResp2] place_s=3 ->	1.0:(t4_s'=t4_f)&(o'=floor(((t2_s+t3_s-t1_s-t4_f)/2+(bavg - favg)/2)))
+					&(ts'=floor(ts-((t2_s+t3_s-t1_s-t4_f)/2+(bavg - favg)/2)))
+					&(co'=floor(co-((t2_s+t3_s-t1_s-t4_f)/2+(bavg - favg)/2)))
+					&(delta_s'=0)&(place_s'=4);
+    [reset1] place_s=4 ->	1.0:(ts'=ts-tm)&(delta_s'=inf)&(place_s'=0);
+
+    
+    [time] delta_s>0 -> 1.0: (ts'=ts+min(delta_m,delta_s,delta_f,delta_b))&(delta_s'=inf);
+       
+endmodule
+
+
+module ForwardChannel
+    x_f: [0..5];
+    t1_f: [0..p];
+    t4_f: [0..p+delay];
+    delta_f: [0..inf] init inf;
+    D_sync: [0..5];
+    D_followUp: [0..5];
+    D_delayResp: [0..5];
+    place_f: [0..4] init 0;
+
+    [sync1] place_f=0 ->	1.0:(D_sync'=fwd)&(x_f'=0)&(delta_f'=fwd)&(place_f'=1);
+    [followUp1]	place_f=0 ->	1.0:(t1_f'=t1_m)&(D_followUp'=fwd)&(x_f'=0)&(delta_f'=fwd)&(place_f'=3);
+    [sync2] place_f=1&x_f=D_sync ->	1.0:(delta_f'=inf)&(place_f'=0);
+    [followUp1] place_f=1 ->	1.0:(D_followUp'=max(fwd+x_f,D_sync))&(delta_f'=D_sync-x_f)&(place_f'=2);
+    [sync2] place_f=2&x_f=D_sync ->	1.0:(delta_f'=D_followUp-x_f)&(place_f'=3);
+    [followUp2] place_f=3&x_f=D_followUp->1.0:(delta_f'=inf)&(place_f'=0);
+    [delayResp1] place_f=0 ->	1.0:(t4_f'=t4_m)&(D_delayResp'=fwd)&(x_f'=0)&(delta_f'=fwd)&(place_f'=4);
+    [delayResp2] place_f=4&x_f=D_delayResp ->	1.0:(delta_f'=inf)&(place_f'=0);
+
+    [time] place_f=0&delta_f>0 -> 1.0: (delta_f'=inf);
+    [time] place_f=1&delta_f>0 -> 1.0: (x_f'=x_f+min(delta_m,delta_s,delta_f,delta_b))
+				      &(delta_f'=D_sync-x_f-min(delta_m,delta_s,delta_f,delta_b));
+    [time] place_f=2&delta_f>0 -> 1.0: (x_f'=x_f+min(delta_m,delta_s,delta_f,delta_b))
+				      &(delta_f'=D_sync-x_f-min(delta_m,delta_s,delta_f,delta_b));
+    [time] place_f=3&delta_f>0 -> 1.0: (x_f'=x_f+min(delta_m,delta_s,delta_f,delta_b))
+				      &(delta_f'=D_followUp-x_f-min(delta_m,delta_s,delta_f,delta_b));
+    [time] place_f=4&delta_f>0 -> 1.0: (x_f'=x_f+min(delta_m,delta_s,delta_f,delta_b))
+				      &(delta_f'=D_delayResp-x_f-min(delta_m,delta_s,delta_f,delta_b));
+
+endmodule
+
+module BackwardChannel
+    x_b: [0..delay];
+    delta_b: [0..inf] init inf;
+    D_delayReq: [0..delay];
+    place_b: [0..1] init 0;
+
+    [delayReq1] place_b=0 -> 0.048: (D_delayReq'=5)&(x_b'=0)&(delta_b'=5)&(place_b'=1)
++ 0.002: (D_delayReq'=6)&(x_b'=0)&(delta_b'=6)&(place_b'=1)
++ 0.003: (D_delayReq'=7)&(x_b'=0)&(delta_b'=7)&(place_b'=1)
++ 0.0115: (D_delayReq'=8)&(x_b'=0)&(delta_b'=8)&(place_b'=1)
++ 0.0095: (D_delayReq'=9)&(x_b'=0)&(delta_b'=9)&(place_b'=1)
++ 0.0225: (D_delayReq'=10)&(x_b'=0)&(delta_b'=10)&(place_b'=1)
++ 0.013: (D_delayReq'=11)&(x_b'=0)&(delta_b'=11)&(place_b'=1)
++ 0.0055: (D_delayReq'=12)&(x_b'=0)&(delta_b'=12)&(place_b'=1)
++ 0.017: (D_delayReq'=13)&(x_b'=0)&(delta_b'=13)&(place_b'=1)
++ 0.0145: (D_delayReq'=14)&(x_b'=0)&(delta_b'=14)&(place_b'=1)
++ 0.0165: (D_delayReq'=15)&(x_b'=0)&(delta_b'=15)&(place_b'=1)
++ 0.017: (D_delayReq'=16)&(x_b'=0)&(delta_b'=16)&(place_b'=1)
++ 0.01: (D_delayReq'=17)&(x_b'=0)&(delta_b'=17)&(place_b'=1)
++ 0.0115: (D_delayReq'=18)&(x_b'=0)&(delta_b'=18)&(place_b'=1)
++ 0.012: (D_delayReq'=19)&(x_b'=0)&(delta_b'=19)&(place_b'=1)
++ 0.014: (D_delayReq'=20)&(x_b'=0)&(delta_b'=20)&(place_b'=1)
++ 0.011: (D_delayReq'=21)&(x_b'=0)&(delta_b'=21)&(place_b'=1)
++ 0.0115: (D_delayReq'=22)&(x_b'=0)&(delta_b'=22)&(place_b'=1)
++ 0.02: (D_delayReq'=23)&(x_b'=0)&(delta_b'=23)&(place_b'=1)
++ 0.007: (D_delayReq'=24)&(x_b'=0)&(delta_b'=24)&(place_b'=1)
++ 0.0135: (D_delayReq'=25)&(x_b'=0)&(delta_b'=25)&(place_b'=1)
++ 0.021: (D_delayReq'=26)&(x_b'=0)&(delta_b'=26)&(place_b'=1)
++ 0.0215: (D_delayReq'=27)&(x_b'=0)&(delta_b'=27)&(place_b'=1)
++ 0.0155: (D_delayReq'=28)&(x_b'=0)&(delta_b'=28)&(place_b'=1)
++ 0.021: (D_delayReq'=29)&(x_b'=0)&(delta_b'=29)&(place_b'=1)
++ 0.0165: (D_delayReq'=30)&(x_b'=0)&(delta_b'=30)&(place_b'=1)
++ 0.019: (D_delayReq'=31)&(x_b'=0)&(delta_b'=31)&(place_b'=1)
++ 0.0155: (D_delayReq'=32)&(x_b'=0)&(delta_b'=32)&(place_b'=1)
++ 0.017: (D_delayReq'=33)&(x_b'=0)&(delta_b'=33)&(place_b'=1)
++ 0.0185: (D_delayReq'=34)&(x_b'=0)&(delta_b'=34)&(place_b'=1)
++ 0.021: (D_delayReq'=35)&(x_b'=0)&(delta_b'=35)&(place_b'=1)
++ 0.0165: (D_delayReq'=36)&(x_b'=0)&(delta_b'=36)&(place_b'=1)
++ 0.014: (D_delayReq'=37)&(x_b'=0)&(delta_b'=37)&(place_b'=1)
++ 0.0105: (D_delayReq'=38)&(x_b'=0)&(delta_b'=38)&(place_b'=1)
++ 0.0195: (D_delayReq'=39)&(x_b'=0)&(delta_b'=39)&(place_b'=1)
++ 0.018: (D_delayReq'=40)&(x_b'=0)&(delta_b'=40)&(place_b'=1)
++ 0.0155: (D_delayReq'=41)&(x_b'=0)&(delta_b'=41)&(place_b'=1)
++ 0.017: (D_delayReq'=42)&(x_b'=0)&(delta_b'=42)&(place_b'=1)
++ 0.017: (D_delayReq'=43)&(x_b'=0)&(delta_b'=43)&(place_b'=1)
++ 0.0145: (D_delayReq'=44)&(x_b'=0)&(delta_b'=44)&(place_b'=1)
++ 0.0125: (D_delayReq'=45)&(x_b'=0)&(delta_b'=45)&(place_b'=1)
++ 0.012: (D_delayReq'=46)&(x_b'=0)&(delta_b'=46)&(place_b'=1)
++ 0.012: (D_delayReq'=47)&(x_b'=0)&(delta_b'=47)&(place_b'=1)
++ 0.0175: (D_delayReq'=48)&(x_b'=0)&(delta_b'=48)&(place_b'=1)
++ 0.025: (D_delayReq'=49)&(x_b'=0)&(delta_b'=49)&(place_b'=1)
++ 0.0125: (D_delayReq'=50)&(x_b'=0)&(delta_b'=50)&(place_b'=1)
++ 0.016: (D_delayReq'=51)&(x_b'=0)&(delta_b'=51)&(place_b'=1)
++ 0.0195: (D_delayReq'=52)&(x_b'=0)&(delta_b'=52)&(place_b'=1)
++ 0.013: (D_delayReq'=53)&(x_b'=0)&(delta_b'=53)&(place_b'=1)
++ 0.0125: (D_delayReq'=54)&(x_b'=0)&(delta_b'=54)&(place_b'=1)
++ 0.0095: (D_delayReq'=55)&(x_b'=0)&(delta_b'=55)&(place_b'=1)
++ 0.0095: (D_delayReq'=56)&(x_b'=0)&(delta_b'=56)&(place_b'=1)
++ 0.009: (D_delayReq'=57)&(x_b'=0)&(delta_b'=57)&(place_b'=1)
++ 0.0115: (D_delayReq'=58)&(x_b'=0)&(delta_b'=58)&(place_b'=1)
++ 0.0175: (D_delayReq'=59)&(x_b'=0)&(delta_b'=59)&(place_b'=1)
++ 0.014: (D_delayReq'=60)&(x_b'=0)&(delta_b'=60)&(place_b'=1)
++ 0.01: (D_delayReq'=61)&(x_b'=0)&(delta_b'=61)&(place_b'=1)
++ 0.009: (D_delayReq'=62)&(x_b'=0)&(delta_b'=62)&(place_b'=1)
++ 0.007: (D_delayReq'=63)&(x_b'=0)&(delta_b'=63)&(place_b'=1)
++ 0.015: (D_delayReq'=64)&(x_b'=0)&(delta_b'=64)&(place_b'=1)
++ 0.0115: (D_delayReq'=65)&(x_b'=0)&(delta_b'=65)&(place_b'=1)
++ 0.014: (D_delayReq'=66)&(x_b'=0)&(delta_b'=66)&(place_b'=1)
++ 0.0085: (D_delayReq'=67)&(x_b'=0)&(delta_b'=67)&(place_b'=1)
++ 0.0035: (D_delayReq'=68)&(x_b'=0)&(delta_b'=68)&(place_b'=1)
++ 0.0035: (D_delayReq'=69)&(x_b'=0)&(delta_b'=69)&(place_b'=1)
++ 0.0085: (D_delayReq'=70)&(x_b'=0)&(delta_b'=70)&(place_b'=1)
++ 0.0105: (D_delayReq'=71)&(x_b'=0)&(delta_b'=71)&(place_b'=1)
++ 0.0025: (D_delayReq'=72)&(x_b'=0)&(delta_b'=72)&(place_b'=1)
++ 0.003: (D_delayReq'=73)&(x_b'=0)&(delta_b'=73)&(place_b'=1)
++ 0.001: (D_delayReq'=75)&(x_b'=0)&(delta_b'=75)&(place_b'=1)
++ 0.0035: (D_delayReq'=76)&(x_b'=0)&(delta_b'=76)&(place_b'=1)
++ 0.001: (D_delayReq'=77)&(x_b'=0)&(delta_b'=77)&(place_b'=1)
++ 0.001: (D_delayReq'=78)&(x_b'=0)&(delta_b'=78)&(place_b'=1)
++ 0.0005: (D_delayReq'=79)&(x_b'=0)&(delta_b'=79)&(place_b'=1)
++ 0.0005: (D_delayReq'=81)&(x_b'=0)&(delta_b'=81)&(place_b'=1)
++ 0.001: (D_delayReq'=83)&(x_b'=0)&(delta_b'=83)&(place_b'=1)
++ 0.0005: (D_delayReq'=84)&(x_b'=0)&(delta_b'=84)&(place_b'=1)
++ 0.0005: (D_delayReq'=85)&(x_b'=0)&(delta_b'=85)&(place_b'=1)
++ 0.0015: (D_delayReq'=88)&(x_b'=0)&(delta_b'=88)&(place_b'=1)
++ 0.0005: (D_delayReq'=89)&(x_b'=0)&(delta_b'=89)&(place_b'=1)
++ 0.0005: (D_delayReq'=91)&(x_b'=0)&(delta_b'=91)&(place_b'=1)
++ 0.002: (D_delayReq'=92)&(x_b'=0)&(delta_b'=92)&(place_b'=1)
++ 0.001: (D_delayReq'=96)&(x_b'=0)&(delta_b'=96)&(place_b'=1)
++ 0.0005: (D_delayReq'=97)&(x_b'=0)&(delta_b'=97)&(place_b'=1)
++ 0.0005: (D_delayReq'=98)&(x_b'=0)&(delta_b'=98)&(place_b'=1)
++ 0.0005: (D_delayReq'=99)&(x_b'=0)&(delta_b'=99)&(place_b'=1)
++ 0.001: (D_delayReq'=101)&(x_b'=0)&(delta_b'=101)&(place_b'=1)
++ 0.0005: (D_delayReq'=102)&(x_b'=0)&(delta_b'=102)&(place_b'=1)
++ 0.001: (D_delayReq'=103)&(x_b'=0)&(delta_b'=103)&(place_b'=1)
++ 0.001: (D_delayReq'=104)&(x_b'=0)&(delta_b'=104)&(place_b'=1)
++ 0.0005: (D_delayReq'=107)&(x_b'=0)&(delta_b'=107)&(place_b'=1)
++ 0.0015: (D_delayReq'=108)&(x_b'=0)&(delta_b'=108)&(place_b'=1)
++ 0.0005: (D_delayReq'=110)&(x_b'=0)&(delta_b'=110)&(place_b'=1)
++ 0.001: (D_delayReq'=111)&(x_b'=0)&(delta_b'=111)&(place_b'=1)
++ 0.0005: (D_delayReq'=114)&(x_b'=0)&(delta_b'=114)&(place_b'=1)
++ 0.001: (D_delayReq'=116)&(x_b'=0)&(delta_b'=116)&(place_b'=1)
++ 0.0005: (D_delayReq'=118)&(x_b'=0)&(delta_b'=118)&(place_b'=1)
++ 0.0005: (D_delayReq'=119)&(x_b'=0)&(delta_b'=119)&(place_b'=1)
++ 0.0015: (D_delayReq'=120)&(x_b'=0)&(delta_b'=120)&(place_b'=1)
++ 0.0005: (D_delayReq'=121)&(x_b'=0)&(delta_b'=121)&(place_b'=1)
++ 0.0005: (D_delayReq'=122)&(x_b'=0)&(delta_b'=122)&(place_b'=1)
++ 0.001: (D_delayReq'=123)&(x_b'=0)&(delta_b'=123)&(place_b'=1)
++ 0.0005: (D_delayReq'=125)&(x_b'=0)&(delta_b'=125)&(place_b'=1)
++ 0.0005: (D_delayReq'=127)&(x_b'=0)&(delta_b'=127)&(place_b'=1)
++ 0.001: (D_delayReq'=128)&(x_b'=0)&(delta_b'=128)&(place_b'=1)
++ 0.0005: (D_delayReq'=129)&(x_b'=0)&(delta_b'=129)&(place_b'=1)
++ 0.001: (D_delayReq'=130)&(x_b'=0)&(delta_b'=130)&(place_b'=1)
++ 0.0005: (D_delayReq'=131)&(x_b'=0)&(delta_b'=131)&(place_b'=1)
++ 0.001: (D_delayReq'=133)&(x_b'=0)&(delta_b'=133)&(place_b'=1)
++ 0.0005: (D_delayReq'=134)&(x_b'=0)&(delta_b'=134)&(place_b'=1)
++ 0.001: (D_delayReq'=136)&(x_b'=0)&(delta_b'=136)&(place_b'=1)
++ 0.0005: (D_delayReq'=137)&(x_b'=0)&(delta_b'=137)&(place_b'=1)
++ 0.0015: (D_delayReq'=141)&(x_b'=0)&(delta_b'=141)&(place_b'=1)
++ 0.0005: (D_delayReq'=143)&(x_b'=0)&(delta_b'=143)&(place_b'=1)
++ 0.0005: (D_delayReq'=144)&(x_b'=0)&(delta_b'=144)&(place_b'=1)
++ 0.0005: (D_delayReq'=145)&(x_b'=0)&(delta_b'=145)&(place_b'=1)
++ 0.0015: (D_delayReq'=146)&(x_b'=0)&(delta_b'=146)&(place_b'=1)
++ 0.0005: (D_delayReq'=148)&(x_b'=0)&(delta_b'=148)&(place_b'=1)
++ 0.001: (D_delayReq'=150)&(x_b'=0)&(delta_b'=150)&(place_b'=1)
++ 0.0005: (D_delayReq'=152)&(x_b'=0)&(delta_b'=152)&(place_b'=1)
++ 0.0005: (D_delayReq'=153)&(x_b'=0)&(delta_b'=153)&(place_b'=1)
++ 0.0005: (D_delayReq'=154)&(x_b'=0)&(delta_b'=154)&(place_b'=1)
++ 0.0005: (D_delayReq'=155)&(x_b'=0)&(delta_b'=155)&(place_b'=1)
++ 0.0005: (D_delayReq'=156)&(x_b'=0)&(delta_b'=156)&(place_b'=1)
++ 0.0005: (D_delayReq'=158)&(x_b'=0)&(delta_b'=158)&(place_b'=1)
++ 0.0005: (D_delayReq'=159)&(x_b'=0)&(delta_b'=159)&(place_b'=1)
++ 0.0005: (D_delayReq'=160)&(x_b'=0)&(delta_b'=160)&(place_b'=1)
++ 0.001: (D_delayReq'=164)&(x_b'=0)&(delta_b'=164)&(place_b'=1)
++ 0.0005: (D_delayReq'=165)&(x_b'=0)&(delta_b'=165)&(place_b'=1)
++ 0.0005: (D_delayReq'=166)&(x_b'=0)&(delta_b'=166)&(place_b'=1)
++ 0.0005: (D_delayReq'=167)&(x_b'=0)&(delta_b'=167)&(place_b'=1)
++ 0.0005: (D_delayReq'=170)&(x_b'=0)&(delta_b'=170)&(place_b'=1)
++ 0.0005: (D_delayReq'=172)&(x_b'=0)&(delta_b'=172)&(place_b'=1)
++ 0.0005: (D_delayReq'=177)&(x_b'=0)&(delta_b'=177)&(place_b'=1);
+
+    [delayReq2] place_b=1&x_b=D_delayReq -> 1.0:(delta_b'=inf)&(place_b'=0);
+    
+    [time] place_b=0&delta_b>0 -> 1.0: (delta_b'=inf);
+    [time] place_b=1&delta_b>0 -> 1.0: (x_b'=x_b+min(delta_m,delta_s,delta_f,delta_b))
+				      &(delta_b'=D_delayReq-x_b-min(delta_m,delta_s,delta_f,delta_b));
+	    
+endmodule

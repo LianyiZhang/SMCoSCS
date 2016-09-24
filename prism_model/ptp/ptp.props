@@ -1,0 +1,6 @@
+const int b;
+
+P=? [ G<=1000 ((tm-ts)<=b)&((tm-ts)>=-b) ]
+
+P>=0.65 [ G<=1000 ((tm-ts)<=b)&((tm-ts)>=-b) ]
+
