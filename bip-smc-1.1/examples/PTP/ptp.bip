@@ -1,0 +1,289 @@
+model ptp
+
+header {#
+
+extern int INFINIT();
+extern int PERIOD();
+extern int MIN(int, int, int, int);
+extern int chooseFollowUpDelay();
+extern int chooseForwardDelay();
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <math.h>
+#include "trace_helper.hpp"
+#include "proba_helper.hpp"
+
+#}
+
+{#
+
+// here are the parameters of the system...
+// notice that the period must be longer enough wrt the propagation delays 
+// otherwise, deadlocks will appear in the model (...)
+// time unit = microseconds
+
+int fwd() {return 5;}      // Forward delay
+int INFINIT()              // ~ 10 minutes would be enough ...
+  { return 600 * 1000 *1000 ; }
+int PERIOD()               // synchronisation period, fixed, 1 min
+  { return 60 * 1000 * 1000; }
+int MIN(int d1, int d2, int d3, int d4) { 
+  int d12 = (d1 < d2) ? d1 : d2; 
+  int d34 = (d3 < d4) ? d3 : d4;
+  return (d12 < d34) ? d12 : d34; }
+int chooseFollowUpDelay()  // follow up delay, random, significantly smaller wrt the channel delays
+  { return  10 + (random() % 10); } 
+int chooseForwardDelay()   // forward channel delay, constant
+{return fwd();}	   
+   
+#}
+
+/*
+ * port types
+ *
+ */
+
+port type SyncPort
+port type FollowUpPort(int t1)
+port type DelayReqPort
+port type DelayRespPort(int t4)
+port type ResetPort(int tm)
+port type TimePort(int delta)
+
+ /*
+  * master component
+  *
+  */
+
+atomic type Master(int P)// P : la periodécité du protocole PTP 
+
+  data int tm = 0        // master clock (absolute, never reset)
+  data int x = 0         // periodic clock (reset every P)
+  data int delta = P     // elapsing time
+  data int t1            // t1 timestamp
+  data int t4            // t4 timestamp
+  data int D             // followUp delay, chosen randomly
+
+  export port SyncPort      synch
+  export port FollowUpPort  followUp(t1)
+  export port DelayReqPort  delayReq
+  export port DelayRespPort delayResp(t4)
+  export port TimePort      time(delta)  
+  export port ResetPort     reset1(tm)  
+
+  place _sync, _followUp ,_delayReq, _delayResp, _reset
+
+  initial to _sync do {trace_i("Master.tm",tm);}
+
+  on synch     from _sync      to _followUp provided (x == P) do { t1 = tm; x = 0; D = chooseFollowUpDelay(); delta = D;}
+  on followUp  from _followUp  to _delayReq provided (x == D) do { delta = P - D;}
+  on delayReq  from _delayReq  to _delayResp do { t4 = tm; delta = 0;}
+  on delayResp from _delayResp to _reset     do { delta = P - x;}
+  on reset1    from _reset     to _sync      do { delta = P - x; tm = 0; trace_i("Master.tm",tm);}
+
+  on time from _sync     to _sync     provided (delta > 0) do { tm = tm + delta; x = x + delta; delta = P - x; trace_i("Master.tm",tm);}
+  on time from _followUp to _followUp provided (delta > 0) do { tm = tm + delta; x = x + delta; delta = D - x; trace_i("Master.tm",tm);}
+  on time from _delayReq to _delayReq provided (delta > 0) do { tm = tm + delta; x = x + delta; delta = P - x; trace_i("Master.tm",tm);}
+  on time from _reset    to _reset    provided (delta > 0) do { tm = tm + delta; x = x + delta; delta = P - x; trace_i("Master.tm",tm);}
+
+// sur time, ajouter une valeur proportionnelle à delta sur tm = tm + delta (DRIFT)
+
+end
+
+ /*
+  * slave component
+  *
+  */
+
+atomic type Slave
+
+  data int ts = 0            // slave clock (absolute, never reset, but updated)
+  data int delta = INFINIT() // elapsing time
+  data distribution_t distrib // Probabilistic Distribution : modification to support new proba_helper library
+  data int t1                // t1 timestamp
+  data int t2                // t2 timestamp
+  data int t3                // t3 timestamp
+  data int t4                // t4 timestamp
+  data int tm                // tm timestamp
+  data int favg=fwd()        // forward delay average : constant
+  data int bavg              // bakward delay average
+  data int o                 // the current offset
+  data int co = 0            // the cummulated offset, 
+	                     // gives an indication about the total deviation
+  data int size			// modification to support new proba_helper library
+
+  export port SyncPort      synch
+  export port FollowUpPort  followUp(t1)
+  export port DelayReqPort  delayReq
+  export port DelayRespPort delayResp(t4)
+  export port TimePort      time(delta)
+  export port ResetPort     reset1(tm)
+
+  place _sync,_followUp,_delayReq,_delayResp,_reset,_time
+
+  initial to _sync,_time do 
+  {#
+  trace_i("Slave.ts",ts);
+  distrib = init_distribution("/home/nouri/smc/examples/PTP/dist_smc2.txt",size);	// modification to support new proba_helper library
+  bavg  = get_average(distrib, size);		// modification to support new proba_helper library
+  #}
+
+  on synch     from _sync      to _followUp  do { t2 = ts; }
+  on followUp  from _followUp  to _delayReq  do { delta = 0; }
+  on delayReq  from _delayReq  to _delayResp do { t3 = ts; delta = INFINIT();}
+  on delayResp from _delayResp to _reset     do { o = (t2 + t3 - t1 - t4) / 2 + (bavg - favg) / 2; ts = ts - o; co = co - o; delta = 0; trace_i("Slave.ts",ts);}
+  on reset1    from _reset     to _sync      do { ts = ts - tm; delta = INFINIT(); trace_i("Slave.ts",ts);}
+  on time      from _time      to _time provided (delta > 0) do { ts = ts + delta; delta = INFINIT(); trace_i("Slave.ts",ts);}
+
+// sur time, ajouter une valeur proportionnelle à delta sur tm = tm + delta (DRIFT)
+
+end
+
+ /*
+  * channel components : Forward
+  *
+  */
+
+atomic type ForwardChannel
+
+  data int x                 // local clock, waiting in some states
+  data int t1                // t1 timestamp
+  data int t4                // t4 timestamp
+  data int delta = INFINIT() // elapsing time
+  data int D_sync            // sync random delay
+  data int D_followUp        // followUp random delay
+  data int D_delayResp       // delayResp random delay
+  
+  export port      TimePort time(delta)
+  export port      SyncPort receiveSync
+  export port      SyncPort sendSync
+  export port  FollowUpPort receiveFollowUp(t1)
+  export port  FollowUpPort sendFollowUp(t1)
+  export port DelayRespPort receiveDelayResp(t4)
+  export port DelayRespPort sendDelayResp(t4)
+
+  place _empty,_sync,_sync_followUp,_followUp,_delayResp
+
+  initial to _empty
+
+  on receiveSync      from _empty         to _sync          do { D_sync = chooseForwardDelay(); x = 0; delta = D_sync; }
+  on receiveFollowUp  from _empty         to _followUp      do { D_followUp = chooseForwardDelay(); x = 0; delta = D_followUp; }
+  on sendSync         from _sync          to _empty    provided (x == D_sync) do { delta = INFINIT(); }
+  on receiveFollowUp  from _sync          to _sync_followUp do { D_followUp = chooseForwardDelay() + x; if (D_followUp < D_sync) D_followUp = D_sync; delta = D_sync - x; }
+  on sendSync         from _sync_followUp to _followUp provided (x == D_sync) do { delta = D_followUp - x; }
+  on sendFollowUp     from _followUp to _empty         provided (x == D_followUp) do { delta = INFINIT(); }
+  on receiveDelayResp from _empty to _delayResp             do { D_delayResp = chooseForwardDelay(); x = 0; delta = D_delayResp; }
+  on sendDelayResp    from _delayResp to _empty        provided (x == D_delayResp) do { delta = INFINIT(); }
+      
+  on time from _empty         to _empty         provided (delta > 0) do { delta = INFINIT(); }
+  on time from _sync          to _sync          provided (delta > 0) do { x = x + delta; delta = D_sync - x; }
+  on time from _sync_followUp to _sync_followUp provided (delta > 0) do { x = x + delta; delta = D_sync - x; }
+  on time from _followUp      to _followUp      provided (delta > 0) do { x = x + delta; delta = D_followUp - x; }
+  on time from _delayResp     to _delayResp     provided (delta > 0) do { x = x + delta; delta = D_delayResp - x; }
+ 
+end
+
+/*
+  * channel components : Backward
+  *
+  */
+
+atomic type BackwardChannel
+
+  data int x                 // local clock, waiting in the full state
+  data int delta = INFINIT() // elapsing time
+  data distribution_t distrib // Probabilistic Distribution : modified to suport new proba_helper library
+  data int D_delayReq        // the randomly chosen delay
+  data int size			// modification to support new proba_helper library
+
+  export port TimePort     time(delta)
+  export port DelayReqPort sendDelayReq
+  export port DelayReqPort receiveDelayReq
+  
+  place _empty, _delayReq
+
+  initial to _empty do {# distrib = init_distribution("/home/nouri/smc/examples/PTP/dist_smc2.txt",size); #}
+ 
+  on receiveDelayReq from _empty    to _delayReq do { D_delayReq = select(distrib,size); x = 0; delta = D_delayReq; }
+  on sendDelayReq    from _delayReq to _empty provided (x == D_delayReq) do { delta = INFINIT(); }
+
+  on time from _empty    to _empty    provided (delta > 0) do { delta = INFINIT(); }
+  on time from _delayReq to _delayReq provided (delta > 0) do { x = x + delta; delta = D_delayReq - x; }
+
+end
+
+ /*
+  * connectors
+  *
+  */
+
+connector type Sync(SyncPort send, SyncPort receive)
+  define send receive
+  on send receive
+  end
+
+connector type FollowUp(FollowUpPort send, FollowUpPort receive)
+  define send receive
+  on send receive down { receive.t1 = send.t1; }
+  end
+
+connector type DelayReq(DelayReqPort send, DelayReqPort receive)
+  define send receive
+  on send receive
+  end
+
+connector type DelayResp(DelayRespPort send, DelayRespPort receive)
+  define send receive
+  on send receive down { receive.t4 = send.t4; }
+  end
+
+connector type Time(TimePort t1, TimePort t2, TimePort t3, TimePort t4) 
+  define t1 t2 t3 t4
+  data int delta // agreed time increment
+  on t1 t2 t3 t4 up   { delta = MIN(t1.delta, t2.delta, t3.delta, t4.delta); }
+                 down { t1.delta = delta; t2.delta = delta; t3.delta = delta; t4.delta = delta; }
+  end
+
+connector type Reset(ResetPort master, ResetPort slave)
+  define master slave
+  on master slave down {slave.tm = master.tm; }
+  end
+
+/*
+ * 
+ * the system
+ *
+ */
+
+compound type System(int P)
+
+  component Master          master(P)
+  component ForwardChannel  fwChannel
+  component BackwardChannel bwChannel
+  component Slave           slave
+
+  connector Sync sync1(master.synch, fwChannel.receiveSync)
+  connector Sync sync2(fwChannel.sendSync, slave.synch)
+
+  connector FollowUp followUp1(master.followUp, fwChannel.receiveFollowUp)
+  connector FollowUp followUp2(fwChannel.sendFollowUp, slave.followUp)
+
+  connector DelayReq delayReq1(slave.delayReq, bwChannel.receiveDelayReq)
+  connector DelayReq delayReq2(bwChannel.sendDelayReq, master.delayReq)
+
+  connector DelayResp delayResp1(master.delayResp, fwChannel.receiveDelayResp)
+  connector DelayResp delayResp2(fwChannel.sendDelayResp, slave.delayResp)
+ 
+  connector Reset reset1(master.reset1, slave.reset1)
+
+  connector Time time(master.time, fwChannel.time, bwChannel.time, slave.time)
+
+end
+
+component System s(PERIOD())
+
+end

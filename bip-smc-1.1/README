@@ -1,0 +1,16 @@
+First, you need to correctly setup BIP v1 to be able to compile and run examples.
+see http://www-verimag.imag.fr/New-BIP-tools.html?lang=en for details
+
+Launche the BIP-SMC Tool:
+cd ~/path/to/bip-smc/tool
+bouble click on the tool jar to run the GUI
+
+You can try the tool with the examples below or your own
+
+BIP1 example:
+	PTP model: examples/PTP
+	You need to first compile the BIP sources to produce an executable (use the build.sh script)
+	Example Properties: 
+	P>=0.25[G{1000}(abs(Master.tm-Slave.ts)<=50)]
+	P=?[G{1000}(abs(Master.tm-Slave.ts)<=50)]
+

@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# to be ebale to compile using bipc.sh you
+# must correctely setup your BIP1 environment
+
+bipc -f ptp.bip --genC-execute
+make -f ptp.bip.mk
+
+echo "Finished. Run: ./ptp.bip.x"
